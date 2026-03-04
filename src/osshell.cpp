@@ -5,6 +5,7 @@
 #include <sstream>
 #include <vector>
 #include <filesystem>
+#include <cctype>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fstream>
@@ -97,6 +98,50 @@ static bool parsePositiveIntStrict(const std::string& s, int& out) {
     }
 }
 
+static bool resolveExecutablePath(
+    const std::string& cmd,
+    const std::vector<std::string>& os_path_list,
+    std::string& exec_path
+) {
+    if (cmd.empty()) return false;
+
+    // Advanced C behavior: direct execution for . or / commands.
+    if (cmd[0] == '.' || cmd[0] == '/') {
+        if (fileExecutableExists(cmd)) {
+            exec_path = cmd;
+            return true;
+        }
+        return false;
+    }
+
+    // Core A behavior: search PATH for the first executable match.
+    for (const auto& dir : os_path_list) {
+        std::string candidate = dir + "/" + cmd;
+        if (fileExecutableExists(candidate)) {
+            exec_path = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void executeResolvedCommand(const std::string& exec_path, std::vector<std::string>& command_list) {
+    char **command_list_exec = nullptr;
+    vectorOfStringsToArrayOfCharArrays(command_list, &command_list_exec);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        execv(exec_path.c_str(), command_list_exec);
+        _exit(127);
+    }
+
+    if (pid > 0) {
+        waitpid(pid, nullptr, 0);
+    }
+
+    freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
+}
+
 int main (int argc, char **argv)
 {
     // Get list of paths to binary executables
@@ -113,7 +158,6 @@ int main (int argc, char **argv)
     // Create variables for storing command user types
     std::string user_command;               // full line user typed
     std::vector<std::string> command_list;  // tokenized command
-    char **command_list_exec = nullptr;     // argv-style array for execv
 
     // Welcome message (must match exactly)
     std::cout << "Welcome to OSShell! Please enter your commands ('exit' to quit)." << std::endl;
@@ -216,28 +260,7 @@ int main (int argc, char **argv)
             continue;
         }
 
-        // Prepare argv for execv
-        vectorOfStringsToArrayOfCharArrays(command_list, &command_list_exec);
-
-        pid_t pid = fork();
-        if (pid < 0) {
-            perror("fork");
-            freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
-            command_list_exec = nullptr;
-            continue;
-        }
-
-        if (pid == 0) {
-            execv(exec_path.c_str(), command_list_exec);
-            perror("execv");
-            _exit(127);
-        } else {
-            int status = 0;
-            waitpid(pid, &status, 0);
-
-            freeArrayOfCharArrays(command_list_exec, command_list.size() + 1);
-            command_list_exec = nullptr;
-        }
+        executeResolvedCommand(exec_path, command_list);
     }
 
     // Ensure file ends with newline for diff-based tests
