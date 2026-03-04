@@ -68,8 +68,12 @@ static void historyClear(std::vector<std::string>& history) {
 // Print history with EXACT spacing: "  1: cmd" (two leading spaces for 1-digit)
 static void historyPrint(const std::vector<std::string>& history, int lastN = -1) {
     int startIndex = 0;
-    if (lastN > 0 && lastN < (int)history.size()) {
+    if (lastN > 0) {
         startIndex = (int)history.size() - lastN;
+
+        if(startIndex < 0){
+            startIndex = 0;
+        }
     }
     for (int i = startIndex; i < (int)history.size(); i++) {
         // width 3 gives: "  1", " 10", "128"
@@ -85,7 +89,7 @@ static bool parsePositiveIntStrict(const std::string& s, int& out) {
     }
     try {
         long long v = std::stoll(s);
-        if (v <= 0 || v > 2147483647LL) return false;
+        if (v <= 0 || v > INT_MAX) return false; // INT_MAX: the largest value we can accept
         out = (int)v;
         return true;
     } catch (...) {
@@ -119,71 +123,74 @@ int main (int argc, char **argv)
         // Prompt (must match exactly, no newline)
         std::cout << "osshell> " << std::flush;
 
+        // get user's input of commands
         if (!std::getline(std::cin, user_command)) {
-            // EOF -> exit shell
             break;
         }
 
-        // Blank input: just reprompt (no error)
+        // if user command is empty or whitespace, reprompt
         if (user_command.empty() || isWhitespaceOnly(user_command)) {
             continue;
         }
 
-        // Tokenize the command line (supports double quotes via splitString)
+        // splits certain commands into tokens (eg: ls)
         splitString(user_command, ' ', command_list);
         if (command_list.empty()) {
             continue;
         }
 
+        // grabs the first token of the user command
         std::string cmd = command_list[0];
 
-        // Special command: exit (log it, then quit)
+        // if user inputs 'exit', we add command to history and break
         if (cmd == "exit") {
             historyAdd(history, user_command);
             break;
         }
 
-        // Special command: history (advanced behavior)
+        // if user inputs 'history', we print the histroy of commands
         if (cmd == "history") {
             // history
-            if (command_list.size() == 1) {
-                historyPrint(history);
-                historyAdd(history, user_command);  // log normal history
-                continue;
+            if (command_list.size() == 1) { // if number of tokens is 1.
+                historyPrint(history); // print enitre histroy
+                historyAdd(history, user_command);  // add 'history' to the command history list
+                continue; // continue (osshell>)
             }
 
             // history <arg>
-            if (command_list.size() == 2) {
-                const std::string& arg = command_list[1];
+            if (command_list.size() == 2) { // if number of tokens is 2.
+                const std::string& arg = command_list[1]; // stores the argument after 'history'
+                // can be 'exit' or a postive integert, (eg: history 5)
+
 
                 if (arg == "clear") {
-                    // Do NOT log "history clear"
+                    // no logging 'history clear'
                     historyClear(history);
                     continue;
                 }
 
                 int n = 0;
-                if (!parsePositiveIntStrict(arg, n)) {
-                    std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
+                if (!parsePositiveIntStrict(arg, n)) { //if arg not a postivie int 
+                    std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl; // print error message
                     historyAdd(history, user_command); // invalid history should be logged
                     continue;
                 }
-
+                //else print last n history commands
                 historyPrint(history, n);
-                historyAdd(history, user_command); // log history N
+                historyAdd(history, user_command); // log history n
                 continue;
             }
 
-            // Too many args
+            // too many args
             std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
             historyAdd(history, user_command);
             continue;
         }
 
-        // Log normal commands
+        // log normal commands
         historyAdd(history, user_command);
 
-        // If command starts with '.' or '/', treat as a path (advanced 5 pts)
+        // If command starts with '.' or '/', treat as a path 
         std::string exec_path;
         bool found = false;
 
@@ -193,7 +200,7 @@ int main (int argc, char **argv)
                 found = true;
             }
         } else {
-            // Search PATH for executable
+            // search the PATH for the command 
             for (const auto& dir : os_path_list) {
                 std::string candidate = dir + "/" + cmd;
                 if (fileExecutableExists(candidate)) {
