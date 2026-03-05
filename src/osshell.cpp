@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <cctype>
+#include <climits>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fstream>
@@ -234,28 +235,8 @@ int main (int argc, char **argv)
         // log normal commands
         historyAdd(history, user_command);
 
-        // If command starts with '.' or '/', treat as a path 
         std::string exec_path;
-        bool found = false;
-
-        if (!cmd.empty() && (cmd[0] == '.' || cmd[0] == '/')) {
-            if (fileExecutableExists(cmd)) {
-                exec_path = cmd;
-                found = true;
-            }
-        } else {
-            // search the PATH for the command 
-            for (const auto& dir : os_path_list) {
-                std::string candidate = dir + "/" + cmd;
-                if (fileExecutableExists(candidate)) {
-                    exec_path = candidate;
-                    found = true;
-                    break; // first match wins
-                }
-            }
-        }
-
-        if (!found) {
+        if (!resolveExecutablePath(cmd, os_path_list, exec_path)) {
             std::cout << cmd << ": Error command not found" << std::endl;
             continue;
         }
