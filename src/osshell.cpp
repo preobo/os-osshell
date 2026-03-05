@@ -67,7 +67,6 @@ static void historyClear(std::vector<std::string>& history) {
     saveHistory(history);
 }
 
-// Print history with EXACT spacing: "  1: cmd" (two leading spaces for 1-digit)
 static void historyPrint(const std::vector<std::string>& history, int lastN = -1) {
     int startIndex = 0;
     if (lastN > 0) {
@@ -78,20 +77,18 @@ static void historyPrint(const std::vector<std::string>& history, int lastN = -1
         }
     }
     for (int i = startIndex; i < (int)history.size(); i++) {
-        // width 3 gives: "  1", " 10", "128"
         printf("%3d: %s\n", i + 1, history[i].c_str());
     }
 }
 
 static bool parsePositiveIntStrict(const std::string& s, int& out) {
-    // must be digits only
     if (s.empty()) return false;
     for (char c : s) {
         if (!std::isdigit(static_cast<unsigned char>(c))) return false;
     }
     try {
         long long v = std::stoll(s);
-        if (v <= 0 || v > INT_MAX) return false; // INT_MAX: the largest value we can accept
+        if (v <= 0 || v > INT_MAX) return false;
         out = (int)v;
         return true;
     } catch (...) {
@@ -106,7 +103,6 @@ static bool resolveExecutablePath(
 ) {
     if (cmd.empty()) return false;
 
-    // Advanced C behavior: direct execution for . or / commands.
     if (cmd[0] == '.' || cmd[0] == '/') {
         if (fileExecutableExists(cmd)) {
             exec_path = cmd;
@@ -115,7 +111,6 @@ static bool resolveExecutablePath(
         return false;
     }
 
-    // Core A behavior: search PATH for the first executable match.
     for (const auto& dir : os_path_list) {
         std::string candidate = dir + "/" + cmd;
         if (fileExecutableExists(candidate)) {
@@ -145,94 +140,74 @@ static void executeResolvedCommand(const std::string& exec_path, std::vector<std
 
 int main (int argc, char **argv)
 {
-    // Get list of paths to binary executables
     std::vector<std::string> os_path_list;
     char* os_path = getenv("PATH");
     if (os_path != nullptr) {
         splitString(os_path, ':', os_path_list);
     }
 
-    // Create list to store history (load persisted history)
     std::vector<std::string> history;
     loadHistory(history);
 
-    // Create variables for storing command user types
-    std::string user_command;               // full line user typed
-    std::vector<std::string> command_list;  // tokenized command
+    std::string user_command;
+    std::vector<std::string> command_list;
 
-    // Welcome message (must match exactly)
     std::cout << "Welcome to OSShell! Please enter your commands ('exit' to quit)." << std::endl;
 
     while (true)
     {
-        // Prompt (must match exactly, no newline)
         std::cout << "osshell> " << std::flush;
 
-        // get user's input of commands
         if (!std::getline(std::cin, user_command)) {
             break;
         }
 
-        // if user command is empty or whitespace, reprompt
         if (user_command.empty() || isWhitespaceOnly(user_command)) {
             continue;
         }
 
-        // splits certain commands into tokens (eg: ls)
         splitString(user_command, ' ', command_list);
         if (command_list.empty()) {
             continue;
         }
 
-        // grabs the first token of the user command
         std::string cmd = command_list[0];
 
-        // if user inputs 'exit', we add command to history and break
         if (cmd == "exit") {
             historyAdd(history, user_command);
             break;
         }
 
-        // if user inputs 'history', we print the histroy of commands
         if (cmd == "history") {
-            // history
-            if (command_list.size() == 1) { // if number of tokens is 1.
-                historyPrint(history); // print enitre histroy
-                historyAdd(history, user_command);  // add 'history' to the command history list
-                continue; // continue (osshell>)
+            if (command_list.size() == 1) {
+                historyPrint(history);
+                historyAdd(history, user_command);
+                continue;
             }
 
-            // history <arg>
-            if (command_list.size() == 2) { // if number of tokens is 2.
-                const std::string& arg = command_list[1]; // stores the argument after 'history'
-                // can be 'exit' or a postive integert, (eg: history 5)
-
-
+            if (command_list.size() == 2) {
+                const std::string& arg = command_list[1];
                 if (arg == "clear") {
-                    // no logging 'history clear'
                     historyClear(history);
                     continue;
                 }
 
                 int n = 0;
-                if (!parsePositiveIntStrict(arg, n)) { //if arg not a postivie int 
-                    std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl; // print error message
-                    historyAdd(history, user_command); // invalid history should be logged
+                if (!parsePositiveIntStrict(arg, n)) {
+                    std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
+                    historyAdd(history, user_command);
                     continue;
                 }
-                //else print last n history commands
                 historyPrint(history, n);
-                historyAdd(history, user_command); // log history n
+                historyAdd(history, user_command);
                 continue;
             }
 
-            // too many args
             std::cout << "Error: history expects an integer > 0 (or 'clear')" << std::endl;
             historyAdd(history, user_command);
             continue;
         }
 
-        // log normal commands
         historyAdd(history, user_command);
 
         std::string exec_path;
@@ -244,7 +219,6 @@ int main (int argc, char **argv)
         executeResolvedCommand(exec_path, command_list);
     }
 
-    // Ensure file ends with newline for diff-based tests
     std::cout << std::endl;
     return 0;
 }
